@@ -1,5 +1,5 @@
 from tensorflow.keras import layers, models
-
+import tensorflow_model_optimization as tfmot
 from tensorflow_model_optimization.sparsity.keras import prune_low_magnitude
 
 def resnet_layer(inputs, num_filters=16, kernel_size=3, strides=1,
