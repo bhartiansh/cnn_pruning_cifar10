@@ -5,32 +5,30 @@ from tensorflow_model_optimization.sparsity.keras import prune_low_magnitude
 def resnet_layer(inputs, num_filters=16, kernel_size=3, strides=1,
                  activation='relu', batch_normalization=True, conv_first=True,
                  pruning=False, pruning_params=None):
-    
-    conv_layer = layers.Conv2D(num_filters,
-                               kernel_size=kernel_size,
-                               strides=strides,
-                               padding='same',
-                               kernel_initializer='he_normal')
-    
-    if pruning and pruning_params:
-        conv_layer = prune_low_magnitude(conv_layer, **pruning_params)
-    
+    conv = layers.Conv2D(num_filters,
+                         kernel_size=kernel_size,
+                         strides=strides,
+                         padding='same',
+                         kernel_initializer='he_normal')
+
+    if pruning and pruning_params is not None:
+        conv = tfmot.sparsity.keras.prune_low_magnitude(conv, **pruning_params)
+
     x = inputs
     if conv_first:
-        x = conv_layer(x)
+        x = conv(x)
         if batch_normalization:
             x = layers.BatchNormalization()(x)
-        if activation:
+        if activation is not None:
             x = layers.Activation(activation)(x)
     else:
         if batch_normalization:
             x = layers.BatchNormalization()(x)
-        if activation:
+        if activation is not None:
             x = layers.Activation(activation)(x)
-        x = conv_layer(x)
-
+        x = conv(x)
     return x
-
+                   
 def build_resnet56(input_shape=(32, 32, 3), num_classes=10, pruning=False, pruning_params=None):
     num_filters = 16
     num_res_blocks = 9
