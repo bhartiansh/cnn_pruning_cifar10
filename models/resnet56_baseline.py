@@ -31,7 +31,7 @@ def resnet_layer(inputs, num_filters=16, kernel_size=3, strides=1,
 
     return x
 
-def build_resnet56(input_shape=(32, 32, 3), num_classes=10):
+def build_resnet56(input_shape=(32, 32, 3), num_classes=10, pruning=False, pruning_params=None):
     num_filters = 16
     num_res_blocks = 9
 
