@@ -1,3 +1,4 @@
+!pip install -q tensorflow-model-optimization
 from tensorflow.keras import layers, models
 import tensorflow_model_optimization as tfmot
 from tensorflow_model_optimization.sparsity.keras import prune_low_magnitude
