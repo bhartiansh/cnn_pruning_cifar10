@@ -36,7 +36,7 @@ def build_resnet56(input_shape=(32, 32, 3), num_classes=10, pruning=False, pruni
     num_res_blocks = 9
 
     inputs = layers.Input(shape=input_shape)
-    x = resnet_layer(inputs=inputs)
+    x = resnet_layer(inputs=inputs, pruning=pruning, pruning_params=pruning_params)
 
     for stack in range(3):
         for res_block in range(num_res_blocks):
@@ -44,19 +44,29 @@ def build_resnet56(input_shape=(32, 32, 3), num_classes=10, pruning=False, pruni
             if stack > 0 and res_block == 0:
                 strides = 2  # downsample
 
-            y = resnet_layer(inputs=x, num_filters=num_filters, strides=strides)
-            y = resnet_layer(inputs=y, num_filters=num_filters, activation=None)
+            y = resnet_layer(inputs=x, num_filters=num_filters, strides=strides, 
+                             pruning=pruning, pruning_params=pruning_params)
+            y = resnet_layer(inputs=y, num_filters=num_filters, activation=None,
+                             pruning=pruning, pruning_params=pruning_params)
+            
             if stack > 0 and res_block == 0:
                 x = resnet_layer(inputs=x, num_filters=num_filters,
-                                 kernel_size=1, strides=strides, activation=None, batch_normalization=False)
+                                 kernel_size=1, strides=strides, activation=None,
+                                 batch_normalization=False, pruning=pruning, pruning_params=pruning_params)
             x = layers.add([x, y])
             x = layers.Activation('relu')(x)
         num_filters *= 2
 
     x = layers.AveragePooling2D(pool_size=8)(x)
     y = layers.Flatten()(x)
-    outputs = layers.Dense(num_classes, activation='softmax',
-                           kernel_initializer='he_normal')(y)
+    
+    dense = layers.Dense(num_classes, activation='softmax',
+                         kernel_initializer='he_normal')
+
+    if pruning and pruning_params is not None:
+        dense = tfmot.sparsity.keras.prune_low_magnitude(dense, **pruning_params)
+
+    outputs = dense(y)
 
     model = models.Model(inputs=inputs, outputs=outputs)
     return model
