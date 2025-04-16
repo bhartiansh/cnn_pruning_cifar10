@@ -1,14 +1,23 @@
+# preprocessing/cifar10_preprocessor.py
+
 import numpy as np
-from tensorflow.keras.datasets import cifar10
+import tensorflow as tf
+from sklearn.model_selection import train_test_split
 
-def preprocess_and_save():
-    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
-    x_train, x_test = x_train / 255.0, x_test / 255.0
+def preprocess_cifar10(test_size=0.2):
+    """
+    Loads and preprocesses the CIFAR-10 dataset, normalizes pixel values, and splits into train/val.
+    
+    Parameters:
+        test_size (float): Fraction of data to use for validation.
 
-    np.save('data/x_train.npy', x_train)
-    np.save('data/y_train.npy', y_train)
-    np.save('data/x_test.npy', x_test)
-    np.save('data/y_test.npy', y_test)
+    Returns:
+        x_train, y_train, x_val, y_val
+    """
+    (x, y), _ = tf.keras.datasets.cifar10.load_data()
+    x = x.astype("float32") / 255.0
+    y = y.astype("int")
 
-if __name__ == "__main__":
-    preprocess_and_save()
+    x_train, x_val, y_train, y_val = train_test_split(x, y, test_size=test_size, random_state=42, stratify=y)
+
+    return x_train, y_train, x_val, y_val
