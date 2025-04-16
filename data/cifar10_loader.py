@@ -1,3 +1,4 @@
+import tensorflow as tf
 def load_cifar10_data(batch_size=64):
     (x_train, y_train), (x_val, y_val) = tf.keras.datasets.cifar10.load_data()
 
