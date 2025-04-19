@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 import tensorflow as tf
-from models.resnet20 import resnet20
+from models.resnet20 import build_resnet20
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.utils import to_categorical
 import os
