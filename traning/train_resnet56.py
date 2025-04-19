@@ -1,52 +1,36 @@
+from models.resnet56_baseline import build_resnet56
+from data.cifar10_loader import load_cifar10_data
 import tensorflow as tf
-from tensorflow.keras.callbacks import LearningRateScheduler, ModelCheckpoint
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from resnet20_baseline import build_resnet20
+import os
 
-def lr_schedule(epoch):
-    if epoch < 80:
-        return 0.1
-    elif epoch < 120:
-        return 0.01
-    else:
-        return 0.001
+def train_model():
+    train_gen, val_gen = load_cifar10_data(batch_size=64)
+    model = build_resnet56(input_shape=(32, 32, 3), num_classes=10)
 
-# Load CIFAR-10
-(x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-x_train = x_train.astype("float32") / 255.0
-x_test = x_test.astype("float32") / 255.0
+    model.compile(optimizer='adam',
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
 
-# Normalize with mean and std
-mean = x_train.mean(axis=(0,1,2), keepdims=True)
-std = x_train.std(axis=(0,1,2), keepdims=True)
-x_train = (x_train - mean) / std
-x_test = (x_test - mean) / std
+    checkpoint_dir = './checkpoints'
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
-y_train = tf.keras.utils.to_categorical(y_train, 10)
-y_test = tf.keras.utils.to_categorical(y_test, 10)
+    checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+        filepath=os.path.join(checkpoint_dir, 'resnet56_cifar10.keras'),
+        monitor='val_accuracy',
+        save_best_only=True,
+        verbose=1)
 
-# Data Augmentation
-datagen = ImageDataGenerator(
-    horizontal_flip=True,
-    width_shift_range=0.1,
-    height_shift_range=0.1
-)
-datagen.fit(x_train)
+    earlystop_cb = tf.keras.callbacks.EarlyStopping(
+        monitor='val_accuracy', patience=5, restore_best_weights=True)
 
-# Model
-model = build_resnet20()
-model.compile(
-    loss="categorical_crossentropy",
-    optimizer=tf.keras.optimizers.SGD(learning_rate=0.1, momentum=0.9, nesterov=True),
-    metrics=["accuracy"]
-)
+    history = model.fit(
+        train_gen,
+        epochs=30,
+        validation_data=val_gen,
+        callbacks=[checkpoint_cb, earlystop_cb]
+    )
 
-# Callbacks
-checkpoint = ModelCheckpoint("resnet20_cifar10.h5", save_best_only=True, monitor="val_accuracy", mode="max")
-lr_scheduler = LearningRateScheduler(lr_schedule)
+    model.save('./models/resnet56_cifar10_final.keras')
 
-# Training
-model.fit(datagen.flow(x_train, y_train, batch_size=128),
-          epochs=200,
-          validation_data=(x_test, y_test),
-          callbacks=[checkpoint, lr_scheduler])
+if __name__ == "__main__":
+    train_model()
