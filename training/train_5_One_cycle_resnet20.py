@@ -1,12 +1,18 @@
-import argparse
 import numpy as np
 import tensorflow as tf
-from models.resnet20 import resnet20
 from tensorflow.keras.datasets import cifar10
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import LearningRateScheduler
+from models.resnet20 import build_resnet20  # Make sure this path is correct
+
 import os
 
+# Create model directory if not exists
+os.makedirs("models", exist_ok=True)
+
+# -------------------------
+# One-Cycle Learning Rate Scheduler
+# -------------------------
 def one_cycle_lr_schedule(initial_lr, max_lr, cycle_length, step_size):
     def lr_schedule(epoch):
         cycle_epoch = epoch % cycle_length
@@ -16,70 +22,54 @@ def one_cycle_lr_schedule(initial_lr, max_lr, cycle_length, step_size):
             return max_lr - (max_lr - initial_lr) * ((cycle_epoch - step_size) / step_size)
     return lr_schedule
 
+# -------------------------
+# One-Cycle Pruning (before training)
+# -------------------------
 def one_cycle_prune(model, sparsity):
     for layer in model.layers:
         if isinstance(layer, tf.keras.layers.Conv2D):
-            # Pruning logic based on layer weight values
-            weight = layer.get_weights()[0]
-            abs_weight = np.abs(weight)
+            weights = layer.get_weights()
+            if len(weights) < 2:
+                continue  # skip if bias or weight is missing
+            kernel, bias = weights
+            abs_weight = np.abs(kernel)
             threshold = np.percentile(abs_weight, sparsity * 100)
-            pruned_weight = np.where(abs_weight < threshold, 0, weight)
-            layer.set_weights([pruned_weight, layer.get_weights()[1]])
+            pruned_kernel = np.where(abs_weight < threshold, 0, kernel)
+            layer.set_weights([pruned_kernel, bias])
+    print(f"One-cycle pruning applied at sparsity {sparsity * 100:.1f}%.")
 
-def train(args):
+# -------------------------
+# Train the Model
+# -------------------------
+def train_model(sparsity=0.5, batch_size=128, epochs=150):
+    model_path = f"models/pruned_resnet20_onecycle_sparsity_{sparsity}.h5"
+    if os.path.exists(model_path):
+        print(f"Model already exists at {model_path}. Skipping training.")
+        return None
+
     (x_train, y_train), (x_test, y_test) = cifar10.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     y_train, y_test = to_categorical(y_train, 10), to_categorical(y_test, 10)
 
-    # Build and compile the model
-    model = resnet20()
+    model = build_resnet20()
     model.build(input_shape=(None, 32, 32, 3))
 
-    # Apply One-Cycle pruning before training
-    one_cycle_prune(model, args.sparsity)
+    one_cycle_prune(model, sparsity)
 
-    # Learning rate schedule for One-Cycle policy
-    lr_schedule = one_cycle_lr_schedule(initial_lr=1e-6, max_lr=1e-2, cycle_length=args.epochs, step_size=int(args.epochs / 2))
+    step_size = epochs // 2
+    lr_schedule = one_cycle_lr_schedule(initial_lr=1e-6, max_lr=1e-2, cycle_length=epochs, step_size=step_size)
     lr_scheduler = LearningRateScheduler(lr_schedule)
 
-    # Compile model
     model.compile(optimizer=tf.keras.optimizers.Adam(),
                   loss='categorical_crossentropy',
                   metrics=['accuracy'])
 
-    # Train the model
-    model.fit(x_train, y_train,
-              epochs=args.epochs,
-              batch_size=args.batch_size,
-              validation_data=(x_test, y_test),
-              callbacks=[lr_scheduler])
+    history = model.fit(x_train, y_train,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        validation_data=(x_test, y_test),
+                        callbacks=[lr_scheduler])
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--sparsity', type=float, default=0.5, help='Pruning sparsity level')
-    parser.add_argument('--batch_size', type=int, default=128, help='Batch size')
-    parser.add_argument('--epochs', type=int, default=150, help='Number of training epochs')
-    args = parser.parse_args()
-
-    train(args)
-    
-    
-'''How to run this code in a Jupyter Notebook
-# Assuming you have the above code in a file named `train_1_both_weights_connection_resnet20.py`
-# You can run the training script from a Jupyter Notebook using the following cells:
-
-# Cell 0: Install required packages
-!pip install -q tensorflow-model-optimization
-import sys
-import os
-sys.path.append('../models')  # Adjust this path if necessary
-    
-# Cell 1: Set your hyperparameters
-sparsity = 0.5         # Change this to desired sparsity (e.g., 0.2, 0.5, 0.8)
-batch_size = 128       # Batch size (e.g., 64, 128, 256)
-epochs = 100           # You can increase this since you're on RTX 4060 now
-
-# Cell 2: Run training script with selected config
-!python training/train_5_One_cycle_resnet20.py --sparsity {sparsity} --batch_size {batch_size} --epochs {epochs}
-
-'''
+    model.save(model_path)
+    print(f"Model saved to {model_path}")
+    return history
